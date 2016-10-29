@@ -24,19 +24,18 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.awt.event.ActionEvent;
 
 public class mainMenu extends JFrame {
 
+	private JFrame frame = this;
 	private JPanel contentPane;
 	private static Socket c;
 	private static OutputStream o;
 	private static InputStream i;
 	private static String MAC;
 	private static String name;
-	
-	private static int port = 1025;
+	private static int port;
 	
 	public JsonObject secureConnection(){
 		try {
@@ -68,16 +67,16 @@ public class mainMenu extends JFrame {
 		return null;
 	}
 	
-	public JsonObject connectToClient(){
+	public JsonObject connectToClient(String id){
 		
 		return null;
 	}
 	
 	private void close(){
 		try {
-			i.close();
-			o.close();
-			c.close();
+			mainMenu.i.close();
+			mainMenu.o.close();
+			mainMenu.c.close();
 		} catch (Exception e) {
 			System.err.print("Error closing socket: " + e);
 		}
@@ -109,7 +108,7 @@ public class mainMenu extends JFrame {
 				System.exit(0);
 			}
 			String msg = j.toString() + "\n";
-			o.write (msg.getBytes(StandardCharsets.UTF_8));
+			mainMenu.o.write (msg.getBytes(StandardCharsets.UTF_8));
 			
 			j = getResponse(i);
 			if(j == null){
@@ -133,12 +132,31 @@ public class mainMenu extends JFrame {
 			System.err.println("Error in list request: " + e);
 		}
 		
-		JList<Clients> list = new JList<Clients>(model);
-		
+		final JList<Clients> list = new JList<Clients>(model);
+
 		JButton connectButton = new JButton("Connect");
 		connectButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				System.exit(0);
+				try{
+					/*JsonObject j = new JsonObject();
+					j = connectToClient(list.getSelectedValue().id);
+					if(j == null){
+						return ;
+					}
+					String msg = j.toString() + "\n";
+					mainMenu.o.write (msg.getBytes(StandardCharsets.UTF_8));
+					
+					j = getResponse(mainMenu.i);
+					if(j == null){
+						return ;
+					}
+					System.out.println(j.toString());*/
+					frame.dispose();
+					chat chat = new chat(mainMenu.c, mainMenu.o, mainMenu.i, mainMenu.MAC, mainMenu.name, mainMenu.port, "abc");
+					chat.setVisible(true);
+				}catch(Exception e1){
+					System.err.println("Error trying to connect with client: " + e1);
+				}
 			}
 		});
 		
