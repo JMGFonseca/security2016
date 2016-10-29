@@ -62,18 +62,6 @@ public class mainMenu extends JFrame {
 		return null;
 	}
 	
-	public JsonObject getClientList(){
-		try {
-			JsonObject j = new JsonObject();
-			j.addProperty("type", "list");
-			
-			return j;
-		} catch (Exception e) {
-			System.err.println("Error in: " + this.getClass().getName() + " line " + 
-					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
-		}
-		return null;
-	}
 	
 	public JsonObject connectToClient(String id){
 		try {
@@ -109,42 +97,7 @@ public class mainMenu extends JFrame {
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
 		
-		DefaultListModel<Clients> model = new DefaultListModel<Clients>();
-		try{
-			JsonObject j = new JsonObject();
-			
-			j = messageServer(getClientList());
-			if(j == null){
-				System.err.println("Error in: " + this.getClass().getName() + " line " + 
-						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
-			}
-			String msg = j.toString() + "\n";
-			c.o.write (msg.getBytes(StandardCharsets.UTF_8));
-			
-			j = getResponse(c.i);
-			if(j == null){
-				System.err.println("Error in: " + this.getClass().getName() + " line " + 
-						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
-			}
-
-			JsonArray jsonA = (j.get("payload")).getAsJsonObject().get("data").getAsJsonArray();
-			if(jsonA.size() > 0){
-				for(int temp = 0; temp < jsonA.size(); temp++){
-					JsonObject jotemp = jsonA.get(temp).getAsJsonObject();
-					String temp3 = jotemp.get("id").getAsString().toString();
-					if(!temp3.equals(client.id)){
-						Clients clients = new Clients(jotemp.get("id").getAsString().toString(), 
-									jotemp.get("name").getAsString().toString(), 
-									jotemp.get("ciphers").getAsString().toString(), 
-									jotemp.get("data").getAsJsonObject());
-						model.addElement(clients);
-					}
-				}
-			}
-		}catch(Exception e){
-			System.err.println("Error in: " + this.getClass().getName() + " line " + 
-					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
-		}
+		DefaultListModel<Clients> model = new DefaultListModel<Clients>();;
 		
 		final JList<Clients> list = new JList<Clients>(model);
 		
@@ -154,12 +107,13 @@ public class mainMenu extends JFrame {
 		connectButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				try{
-					connectButton.setEnabled(false);
-					settingsButton.setEnabled(false);
-					JsonObject j = new JsonObject();
 					if(list.getSelectedValue() == null){
 						return ;
 					}
+					JsonObject j = new JsonObject();
+					connectButton.setEnabled(false);
+					settingsButton.setEnabled(false);
+					checkIncoming.stop();
 					j = messageServer(connectToClient(list.getSelectedValue().id));
 					if(j == null){
 						System.err.println("Error in: " + this.getClass().getName() + " line " + 
@@ -212,7 +166,7 @@ public class mainMenu extends JFrame {
 		);
 		contentPane.setLayout(gl_contentPane);
 		
-		checkIncoming.main(this, c, client);
+		checkIncoming.main(frame, model, c, client);
 		checkIncoming.start();
 	}
 }

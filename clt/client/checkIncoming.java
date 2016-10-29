@@ -11,10 +11,13 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import javax.swing.DefaultListModel;
 import javax.swing.JFrame;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -25,7 +28,6 @@ public class checkIncoming implements PropertyChangeListener {
 	private getInc runnable;
 	private static connection c;
 	private static Clients src;
-
     private static JFrame j;
     
     public static class getInc extends Thread {
@@ -37,14 +39,17 @@ public class checkIncoming implements PropertyChangeListener {
         private Clients src;
         private JFrame frame;
         
+        private DefaultListModel<Clients> model;
+        
         public volatile static boolean flag = true;
         
         DateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
         
-        getInc(connection c, Clients src, JFrame frame){
+        getInc(connection c, Clients src, JFrame frame, DefaultListModel<Clients> model){
         	this.c = c;
         	this.src = src;
         	this.frame = frame;
+        	this.model = model;
         }
 
         public void addPropertyChangeListener(PropertyChangeListener listener) {
@@ -68,6 +73,21 @@ public class checkIncoming implements PropertyChangeListener {
         public void run() {
         	JsonObject j = new JsonObject();
             while (flag) {
+            	try{
+        			JsonObject j1 = new JsonObject();
+        			
+        			j1 = messageServer(getClientList());
+        			if(j1 == null){
+        				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+        						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
+        			}
+        			String msg = j1.toString() + "\n";
+        			c.o.write (msg.getBytes(StandardCharsets.UTF_8));
+        		}catch(Exception e){
+        			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+        					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+        		}
+            	
             	j = getResponse(c.i);
             	if(j == null){
             		System.err.println("Error in: " + this.getClass().getName() + " line " + 
@@ -78,6 +98,35 @@ public class checkIncoming implements PropertyChangeListener {
             	
             	if (innerCmd == null) {
    			     
+            	}
+            	else if (innerCmd.getAsString().equals( "list" )) {
+            		DefaultListModel<Clients> temp1 = new DefaultListModel<Clients>();
+            		JsonArray jsonA = (j.get("payload")).getAsJsonObject().get("data").getAsJsonArray();
+        			if(jsonA.size() > 0){
+        				for(int temp = 0; temp < jsonA.size(); temp++){
+        					JsonObject jotemp = jsonA.get(temp).getAsJsonObject();
+        					String temp3 = jotemp.get("id").getAsString().toString();
+        					if(!temp3.equals(src.id)){
+        						Clients clients = new Clients(jotemp.get("id").getAsString().toString(), 
+        									jotemp.get("name").getAsString().toString(), 
+        									jotemp.get("ciphers").getAsString().toString(), 
+        									jotemp.get("data").getAsJsonObject());
+        						temp1.addElement(clients);
+        					}
+        				}//Add Connected
+        				for(int i = 0; i < temp1.size(); i++){
+        					Clients tmp = temp1.get(i);
+        					if(!model.contains(tmp)){
+        						model.addElement(tmp);
+        					}
+        				}//Remove disconnected
+        				for(int i = 0; i < model.size(); i++){
+        					Clients tmp = model.get(i);
+        					if(!temp1.contains(tmp)){
+        						model.remove(i);
+        					}
+        				}
+        			}
             	}
             	else if (innerCmd.getAsString().equals( "client-connect" )) {
             		JsonElement id = payload.get( "dst" );
@@ -98,6 +147,7 @@ public class checkIncoming implements PropertyChangeListener {
 	   			    }
 	   			    else if(id.getAsString().toString().equals(src.id)){
 	   			    	frame.dispose();
+	   			    	flag = false;
 	            		mainMenu mn = new mainMenu(c, src);
 	            		mn.setVisible(true);
 	   			    }
@@ -121,23 +171,52 @@ public class checkIncoming implements PropertyChangeListener {
 	   			    }
             	}
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(5000);
                 } catch (Exception e) {
                 	System.err.println("Error in: " + this.getClass().getName() + " line " + 
 							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
                 }
-                
             }
         }
+        
+        public JsonObject messageServer(JsonObject jo){
+    		try {
+    			JsonObject j = new JsonObject();
+    			
+    			j.addProperty("type", "secure");
+    			j.addProperty("sa-data", "mac");
+    			j.add("payload", jo);
+    			
+    			return j;
+    		} catch (Exception e) {
+    			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+    					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+    		}
+    		return null;
+    	}
 
         public String getCommand() {
             return command;
         }
+        
+    	public JsonObject getClientList(){
+    		try {
+    			JsonObject j = new JsonObject();
+    			j.addProperty("type", "list");
+    			
+    			return j;
+    		} catch (Exception e) {
+    			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+    					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+    		}
+    		return null;
+    	}
 
         private void setCommand(String command) {
             String old = this.command;
             this.command = command;
             pcs.firePropertyChange("command", old, command);
+            System.out.println("its here");
         }
     }
 
@@ -280,11 +359,11 @@ public class checkIncoming implements PropertyChangeListener {
 	}
     
 
-    public static void main(JFrame j, connection c, Clients src) {
+    public static void main(JFrame j, DefaultListModel<Clients> list, connection c, Clients src) {
     	checkIncoming.src = src;
     	checkIncoming.c = c;
     	checkIncoming.j = j;
-        final getInc runnable = new getInc(c, src, j);
+        final getInc runnable = new getInc(c, src, j, list);
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
