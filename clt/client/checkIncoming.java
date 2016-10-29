@@ -39,6 +39,8 @@ public class checkIncoming implements PropertyChangeListener {
         private Clients src;
         private JFrame frame;
         
+        public static Thread one;
+        
         private DefaultListModel<Clients> model;
         
         public volatile static boolean flag = true;
@@ -71,23 +73,32 @@ public class checkIncoming implements PropertyChangeListener {
 
         @Override
         public void run() {
+        	one = new Thread() {
+        	    public void run() {
+        	    	while(flag){
+        	    		try {
+                			JsonObject j1 = new JsonObject();
+                			
+                			j1 = messageServer(getClientList());
+                			if(j1 == null){
+                				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+                						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
+                			}
+                			String msg = j1.toString() + "\n";
+                			c.o.write (msg.getBytes(StandardCharsets.UTF_8));
+
+	        	            Thread.sleep(5000);
+	        	        } catch(Exception e) {
+	        	        	System.err.println("Error in: " + this.getClass().getName() + " line " + 
+	            					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+	        	        }
+        	    	}
+        	    }  
+        	};
+        	
+        	one.start();
         	JsonObject j = new JsonObject();
             while (flag) {
-            	try{
-        			JsonObject j1 = new JsonObject();
-        			
-        			j1 = messageServer(getClientList());
-        			if(j1 == null){
-        				System.err.println("Error in: " + this.getClass().getName() + " line " + 
-        						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
-        			}
-        			String msg = j1.toString() + "\n";
-        			c.o.write (msg.getBytes(StandardCharsets.UTF_8));
-        		}catch(Exception e){
-        			System.err.println("Error in: " + this.getClass().getName() + " line " + 
-        					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
-        		}
-            	
             	j = getResponse(c.i);
             	if(j == null){
             		System.err.println("Error in: " + this.getClass().getName() + " line " + 
@@ -146,8 +157,8 @@ public class checkIncoming implements PropertyChangeListener {
 	   			    	 
 	   			    }
 	   			    else if(id.getAsString().toString().equals(src.id)){
+	   			    	one.stop();
 	   			    	frame.dispose();
-	   			    	flag = false;
 	            		mainMenu mn = new mainMenu(c, src);
 	            		mn.setVisible(true);
 	   			    }
@@ -161,7 +172,7 @@ public class checkIncoming implements PropertyChangeListener {
 	   			    else if(id.getAsString().toString().equals(src.id)){
 	   			    	JsonObject data = payload.get( "data" ).getAsJsonObject();
 	                	String name = data.get("name").getAsString().toString();
-	            		flag = false;
+	                	checkIncoming.stop();
 						frame.dispose();
 						chat chat = new chat(c, src, new Clients(payload.get( "dst" ).getAsString(), 
 			        			name,
@@ -171,7 +182,7 @@ public class checkIncoming implements PropertyChangeListener {
 	   			    }
             	}
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(1000);
                 } catch (Exception e) {
                 	System.err.println("Error in: " + this.getClass().getName() + " line " + 
 							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
@@ -216,7 +227,6 @@ public class checkIncoming implements PropertyChangeListener {
             String old = this.command;
             this.command = command;
             pcs.firePropertyChange("command", old, command);
-            System.out.println("its here");
         }
     }
 
@@ -226,6 +236,7 @@ public class checkIncoming implements PropertyChangeListener {
     }
     
     public static void stop(){
+    	getInc.one.stop();
     	getInc.flag = false;
     }
     

@@ -10,6 +10,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonReader;
 
+import javax.swing.ButtonGroup;
 import javax.swing.DefaultListModel;
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
@@ -19,12 +20,15 @@ import java.awt.Color;
 import javax.swing.JLabel;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.awt.event.ActionEvent;
+import javax.swing.JRadioButton;
 
 public class mainMenu extends JFrame {
 
@@ -32,6 +36,7 @@ public class mainMenu extends JFrame {
 	private JPanel contentPane;
 	private static connection c;
 	private static Clients client;
+	private static boolean flag = false;
 	
 	public JsonObject messageServer(JsonObject jo){
 		try {
@@ -89,7 +94,7 @@ public class mainMenu extends JFrame {
 		mainMenu.c = c;
 		mainMenu.client = client;
 		
-		setTitle("SCIM");
+		setTitle("SCIM : " + client.id);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 450, 300);
 		contentPane = new JPanel();
@@ -101,7 +106,35 @@ public class mainMenu extends JFrame {
 		
 		final JList<Clients> list = new JList<Clients>(model);
 		
-		final JButton settingsButton = new JButton("Settings");
+		itemListener l = new itemListener(client);
+		final JRadioButton btnDES = new JRadioButton("DES");
+		btnDES.addItemListener(l);
+		final JRadioButton btnAES = new JRadioButton("AES");
+		btnAES.addItemListener(l);
+		btnDES.setVisible(flag);
+		btnAES.setVisible(flag);
+		if(client.ciphers.equals("DES")){
+			btnDES.setSelected(true);
+			btnAES.setSelected(false);
+		}
+		else if (client.ciphers.equals("AES")){
+			btnDES.setSelected(false);
+			btnAES.setSelected(true);
+		}
+		
+		ButtonGroup bg = new ButtonGroup();
+		bg.add(btnDES);
+		bg.add(btnAES);
+		
+		final JButton ciphersButton = new JButton("Ciphers");
+		
+		ciphersButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				flag = !flag;
+				btnDES.setVisible(flag);
+				btnAES.setVisible(flag);
+			}
+		});
 
 		final JButton connectButton = new JButton("Connect");
 		connectButton.addActionListener(new ActionListener() {
@@ -112,7 +145,7 @@ public class mainMenu extends JFrame {
 					}
 					JsonObject j = new JsonObject();
 					connectButton.setEnabled(false);
-					settingsButton.setEnabled(false);
+					ciphersButton.setEnabled(false);
 					checkIncoming.stop();
 					j = messageServer(connectToClient(list.getSelectedValue().id));
 					if(j == null){
@@ -144,11 +177,18 @@ public class mainMenu extends JFrame {
 							.addComponent(lblNewLabel))
 						.addGroup(gl_contentPane.createSequentialGroup()
 							.addComponent(list, GroupLayout.PREFERRED_SIZE, 271, GroupLayout.PREFERRED_SIZE)
-							.addGap(28)
 							.addGroup(gl_contentPane.createParallelGroup(Alignment.LEADING)
-								.addComponent(settingsButton)
-								.addComponent(connectButton))))
-					.addContainerGap(17, Short.MAX_VALUE))
+								.addGroup(gl_contentPane.createSequentialGroup()
+									.addGap(28)
+									.addGroup(gl_contentPane.createParallelGroup(Alignment.LEADING)
+										.addComponent(ciphersButton)
+										.addComponent(connectButton)))
+								.addGroup(gl_contentPane.createSequentialGroup()
+									.addPreferredGap(ComponentPlacement.UNRELATED)
+									.addGroup(gl_contentPane.createParallelGroup(Alignment.LEADING)
+										.addComponent(btnAES)
+										.addComponent(btnDES))))))
+					.addContainerGap(GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
 		);
 		gl_contentPane.setVerticalGroup(
 			gl_contentPane.createParallelGroup(Alignment.LEADING)
@@ -160,13 +200,37 @@ public class mainMenu extends JFrame {
 						.addGroup(gl_contentPane.createSequentialGroup()
 							.addComponent(connectButton)
 							.addPreferredGap(ComponentPlacement.RELATED)
-							.addComponent(settingsButton))
+							.addComponent(ciphersButton)
+							.addPreferredGap(ComponentPlacement.UNRELATED)
+							.addComponent(btnDES)
+							.addPreferredGap(ComponentPlacement.RELATED)
+							.addComponent(btnAES))
 						.addComponent(list, GroupLayout.PREFERRED_SIZE, 201, GroupLayout.PREFERRED_SIZE))
 					.addContainerGap(20, Short.MAX_VALUE))
 		);
 		contentPane.setLayout(gl_contentPane);
-		
+
 		checkIncoming.main(frame, model, c, client);
 		checkIncoming.start();
+	}
+}
+
+class itemListener implements ItemListener{
+	
+	private Clients client;
+	
+	itemListener(Clients client){
+		this.client = client;
+	}
+	
+	@Override
+	public void itemStateChanged(ItemEvent e) {
+	    if (e.getStateChange() == ItemEvent.SELECTED){
+	    	String str = e.getItemSelectable().toString().split("text=")[1];
+	        client.ciphers = str.substring(0,str.length()-1);
+	    }
+	    else if (e.getStateChange() == ItemEvent.DESELECTED) {
+	    	
+	    }
 	}
 }
