@@ -14,10 +14,8 @@ import java.awt.Color;
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
 import javax.swing.JTextField;
-import javax.swing.SwingUtilities;
 import javax.swing.JButton;
 import java.awt.event.ActionListener;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -30,37 +28,17 @@ public class chat extends JFrame{
 	private JPanel contentPane;
 	private JFrame frame = this;
 	
-	private static Socket c;
-	private static OutputStream o;
-	private static InputStream i;
-	private static String MAC;
-	private static String name;
-	private static int port;
-	private static String dst;
+	private static connection c;
+	private static Clients src;
+	private static Clients dst;
 	private JTextField textField;
-
-	public static JsonObject getResponse(InputStream i){
-		try{
-			JsonReader in = new JsonReader( new InputStreamReader ( i, "UTF-8") );
-			JsonElement data = new JsonParser().parse( in );
-			
-			return data.getAsJsonObject();
-		}catch(Exception e){
-			System.err.print( "Cannot get server response: " + e );
-		}
-		return null;
-	}
 	
 	/**
 	 * Create the frame.
 	 */
-	public chat(Socket c, OutputStream o, InputStream i, String MAC, String name, int port, String dst) {
+	public chat(connection c, Clients src, Clients dst) {
 		chat.c = c;
-		chat.o = o;
-		chat.i = i;
-		chat.MAC = MAC;
-		chat.name = name;
-		chat.port = port;
+		chat.src = src;
 		chat.dst = dst;
 		
 		setTitle("SCIM");
@@ -98,7 +76,7 @@ public class chat extends JFrame{
 			public void actionPerformed(ActionEvent e) {
 				checkMSG.stop();
 				frame.dispose();
-				mainMenu mn = new mainMenu(chat.c, chat.o, chat.i, chat.MAC, chat.name, chat.port);
+				mainMenu mn = new mainMenu(chat.c, chat.src);
 				mn.setVisible(true);
 			}
 		});
@@ -137,11 +115,10 @@ public class chat extends JFrame{
 		
 		try {
 			checkMSG.start();
-			checkMSG.main(null, textArea, chat.i, disconnectButton);
-			//TestThreadingAndGUI.main(null);
+			checkMSG.main(textArea, chat.c.port, src, dst, disconnectButton);
 		} catch (Exception e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
 		}
 	}
 }

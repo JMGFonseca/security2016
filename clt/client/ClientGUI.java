@@ -9,6 +9,8 @@ import javax.swing.GroupLayout.Alignment;
 import javax.swing.JButton;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+
 import java.awt.Color;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
@@ -19,7 +21,10 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ThreadLocalRandom;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -30,11 +35,12 @@ public class ClientGUI {
 
 	private JFrame frmScim;
 	private JTextField usernameField;
-	private static Socket c;
-	private static OutputStream o;
-	private static InputStream i;
-	private static String MAC;
+	private static connection c;
+	private static Clients client;
 	private static String name;
+	private static String MAC;
+	private static int id;
+	private static int phase = 1;
 
 	/**
 	 * Launch the application.
@@ -46,9 +52,9 @@ public class ClientGUI {
 			JsonObject j = new JsonObject();
 			
 			j.addProperty("type", "connect");
-			j.addProperty("phase", 1);
+			j.addProperty("phase", phase);
 			j.addProperty("name", name);
-			j.addProperty("id", 123);
+			j.addProperty("id", id);
 			j.addProperty("ciphers", "DES");
 			
 			JsonObject temp = new JsonObject();
@@ -57,7 +63,8 @@ public class ClientGUI {
 			
 			return j;
 		} catch (Exception e) {
-			System.err.print( "Cannot create a connection: " + e );
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		return null;
 	}
@@ -69,7 +76,8 @@ public class ClientGUI {
 			
 			return data.getAsJsonObject();
 		}catch(Exception e){
-			System.err.print( "Cannot get server response: " + e );
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		return null;
 	}
@@ -89,19 +97,10 @@ public class ClientGUI {
 			
 			return sb.toString();
 		}catch(Exception e){
-			System.err.print( "Cannot get this machine MAC Address: " + e );
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		return null;
-	}
-	
-	private void close(){
-		try {
-			i.close();
-			o.close();
-			c.close();
-		} catch (IOException e) {
-			System.err.print("Error closing socket: " + e);
-		}
 	}
 	
 	public static void main(String[] args) {
@@ -111,7 +110,8 @@ public class ClientGUI {
 					ClientGUI window = new ClientGUI();
 					window.frmScim.setVisible(true);
 				} catch (Exception e) {
-					e.printStackTrace();
+					System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 				}
 			}
 		});
@@ -155,7 +155,7 @@ public class ClientGUI {
 		JLabel lblSecureInstantMessaging = new JLabel("Secure Instant Messaging System");
 		lblSecureInstantMessaging.setForeground(new Color(255, 255, 255));
 		
-		JButton btnLogin = new JButton("Login");
+		final JButton btnLogin = new JButton("Login");
 		GroupLayout gl_panelLogin = new GroupLayout(panelLogin);
 		gl_panelLogin.setHorizontalGroup(
 			gl_panelLogin.createParallelGroup(Alignment.LEADING)
@@ -189,45 +189,64 @@ public class ClientGUI {
 					.addComponent(btnLogin)
 					.addGap(57))
 		);
+		
+		try {
+			c = new connection(new Socket("localhost", port));
+		} catch (Exception e2) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e2);
+			JOptionPane.showMessageDialog(panelLogin, "No server to connect to.",
+				    "Server Error",
+				    JOptionPane.ERROR_MESSAGE);
+			System.exit(0);
+		}
+		
 		panelLogin.setLayout(gl_panelLogin);
 		btnLogin.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				try {
 					if(usernameField.getText().equals(""))
 						return;
-					c = new Socket("localhost", port);
+					
 					MAC = getMyMAC();
-					o = c.getOutputStream();
-					i = c.getInputStream();
 					name = usernameField.getText();
+					id = ThreadLocalRandom.current().nextInt(1, 1000);
 					
 					JsonObject j = new JsonObject();
 					j = connectToServer();
 					if(j == null){
-						close();
-						System.exit(0);
+						System.err.println("Error in: " + this.getClass().getName() + " line " + 
+								Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
 					}
 					String msg = j.toString() + "\n";
-					o.write (msg.getBytes(StandardCharsets.UTF_8));
+					c.o.write (msg.getBytes(StandardCharsets.UTF_8));
 					
-					j = getResponse(i);
+					j = getResponse(c.i);
 					if(j == null){
-						close();
-						System.exit(0);
+						System.err.println("Error in: " + this.getClass().getName() + " line " + 
+									Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
 					}
-					msg = j.get("data").toString();
-					msg = msg.replaceAll("\"", "");
-					if(!msg.equals("ok")){
-						System.err.println("Error in data sent from client.");
-						close();
-						System.exit(0);
+					msg = j.get("data").getAsString().toString();
+					if(msg.equals("ok")){
+						frmScim.dispose();
+						JsonObject tempj = new JsonObject();
+						tempj.addProperty("Mac", MAC);
+						client = new Clients(Integer.toString(id), name, "DES", tempj);
+						mainMenu mn = new mainMenu(c, client);
+						mn.setVisible(true);
 					}
-					
-					frmScim.dispose();
-					mainMenu mn = new mainMenu(c, o, i, MAC, name, port);
-					mn.setVisible(true);
+					else if(msg.equals("error: id already in use")){
+						id = ThreadLocalRandom.current().nextInt(1, 1000);
+						btnLogin.doClick();
+					}
+					else{
+						JOptionPane.showMessageDialog(panelLogin, "Username already in use.",
+							    "Error",
+							    JOptionPane.ERROR_MESSAGE);
+					}
 				} catch (Exception e1) {
-					e1.printStackTrace();
+					System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
 				}
 			}
 		});

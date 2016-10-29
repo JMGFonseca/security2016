@@ -5,11 +5,10 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.Socket;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Random;
-
 import javax.swing.JButton;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -22,16 +21,14 @@ import com.google.gson.stream.JsonReader;
 public class checkMSG implements PropertyChangeListener {
 
     private static JTextArea chat;
-
     private getMSG runnable;
     
-
     public static class getMSG implements Runnable {
-    	
-    	private InputStream in;
 
         private PropertyChangeSupport pcs = new PropertyChangeSupport(this);
-
+        
+        private connection c;
+        private int port;
         private String command;
         private JButton jb;
         
@@ -40,35 +37,57 @@ public class checkMSG implements PropertyChangeListener {
         
         DateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
         
-        getMSG(InputStream in, JButton jb){
-        	this.in = in;
+        getMSG(int port, JButton jb){
+        	this.port = port;
         	this.jb = jb;
         }
 
         public void addPropertyChangeListener(PropertyChangeListener listener) {
             pcs.addPropertyChangeListener(listener);
         }
+        
+        private JsonObject getResponse(InputStream i){
+    		try{
+    			JsonReader in = new JsonReader( new InputStreamReader ( i, "UTF-8") );
+    			JsonElement data = new JsonParser().parse( in );
+    			
+    			return data.getAsJsonObject();
+    		}catch(Exception e){
+    			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+    					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+    		}
+    		return null;
+    	}
 
         @Override
         public void run() {
+        	try {
+				c = new connection(new Socket("localhost", port));
+			} catch (Exception e1) {
+				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
+			}
         	JsonObject j = new JsonObject();
             while (flag) {
                 try {
-                	//j = getResponse(in);
-                	//if(j == null){
-                		//System.err.println("Error receiving from server.");
-                	//}
-                	//else{
+                	j = getResponse(c.i);
+                	if(j == null){
+                		System.err.println("Error in: " + this.getClass().getName() + " line " + 
+								Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
+                	}
+                	else{
                 	
-                		//sendACK();
-                	//}
+                		sendACK();
+                	}
                     Thread.sleep(1000);
                 } catch (Exception e) {
-                    System.err.println("Error: " + e);
+                	System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
                 }
                 Date date = new Date();
                 setCommand(dateFormat.format(date) + "");
             }
+            c.close();
         }
         
         private void sendACK(){
@@ -106,32 +125,19 @@ public class checkMSG implements PropertyChangeListener {
     @Override
     public void propertyChange(PropertyChangeEvent evt) {
         if (evt.getPropertyName().equals("command")) {
-            // Received new command (outside EDT)
             SwingUtilities.invokeLater(new Runnable() {
                 @Override
                 public void run() {
-                    // Updating GUI inside EDT
                     executeCommand();
                 }
             });
         }
     }
     
-    public static JsonObject getResponse(InputStream i){
-		try{
-			JsonReader in = new JsonReader( new InputStreamReader ( i, "UTF-8") );
-			JsonElement data = new JsonParser().parse( in );
-			
-			return data.getAsJsonObject();
-		}catch(Exception e){
-			System.err.print( "Cannot get server response: " + e );
-		}
-		return null;
-	}
 
-    public static void main(String[] args, JTextArea jt, InputStream in, JButton jb) {
+    public static void main(JTextArea jt, int port, Clients src, Clients dst, JButton jb) {
     	chat = jt;
-        final getMSG runnable = new getMSG(in, jb);
+        final getMSG runnable = new getMSG(port, jb);
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {

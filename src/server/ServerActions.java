@@ -137,7 +137,8 @@ class ServerActions implements Runnable {
 				    innerCmd.getAsString().equals( "client-disconnect" ) ||
 				    innerCmd.getAsString().equals( "client-com" ) ||
 				    innerCmd.getAsString().equals( "ack" )) {
-			     JsonElement id = data.get( "dst" );
+
+			     JsonElement id = payload.get( "dst" );
 		
 			     if (id == null) {
 				 // send error
@@ -156,6 +157,7 @@ class ServerActions implements Runnable {
 			     }
 		
 			     try {
+			    	 System.out.println("Sent: " + data.toString());
 			    	 target.write( data.toString().getBytes( StandardCharsets.UTF_8 ) );
 			     } catch (Exception e) {}
 			 }

@@ -30,27 +30,21 @@ public class mainMenu extends JFrame {
 
 	private JFrame frame = this;
 	private JPanel contentPane;
-	private static Socket c;
-	private static OutputStream o;
-	private static InputStream i;
-	private static String MAC;
-	private static String name;
-	private static int port;
+	private static connection c;
+	private static Clients client;
 	
-	public JsonObject secureConnection(){
+	public JsonObject messageServer(JsonObject jo){
 		try {
 			JsonObject j = new JsonObject();
 			
 			j.addProperty("type", "secure");
 			j.addProperty("sa-data", "mac");
-			
-			JsonObject temp = new JsonObject();
-			temp.addProperty("type", "list");
-			j.add("payload", temp);
+			j.add("payload", jo);
 			
 			return j;
 		} catch (Exception e) {
-			System.err.print( "Cannot create secure connection: " + e );
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		return null;
 	}
@@ -62,33 +56,50 @@ public class mainMenu extends JFrame {
 			
 			return data.getAsJsonObject();
 		}catch(Exception e){
-			System.err.print( "Cannot get server response: " + e );
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+		}
+		return null;
+	}
+	
+	public JsonObject getClientList(){
+		try {
+			JsonObject j = new JsonObject();
+			j.addProperty("type", "list");
+			
+			return j;
+		} catch (Exception e) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		return null;
 	}
 	
 	public JsonObject connectToClient(String id){
-		
+		try {
+			JsonObject j = new JsonObject();
+			
+			j.addProperty("type", "client-connect");
+			j.addProperty("src", client.id);
+			j.addProperty("dst", id);
+			j.addProperty("phase", 1);
+			j.addProperty("ciphers", "DES");
+			
+			JsonObject temp = client.description.getAsJsonObject();
+			temp.addProperty("name", client.name);
+			j.add("data", temp);
+			
+			return j;
+		} catch (Exception e) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+		}
 		return null;
 	}
-	
-	private void close(){
-		try {
-			mainMenu.i.close();
-			mainMenu.o.close();
-			mainMenu.c.close();
-		} catch (Exception e) {
-			System.err.print("Error closing socket: " + e);
-		}
-	}
 
-	public mainMenu(Socket c, OutputStream o, InputStream i, String MAC, String name, int port) {
+	public mainMenu(connection c, Clients client) {
 		mainMenu.c = c;
-		mainMenu.o = o;
-		mainMenu.i = i;
-		mainMenu.MAC = MAC;
-		mainMenu.name = name;
-		mainMenu.port = port;
+		mainMenu.client = client;
 		
 		setTitle("SCIM");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -102,68 +113,72 @@ public class mainMenu extends JFrame {
 		try{
 			JsonObject j = new JsonObject();
 			
-			j = secureConnection();
+			j = messageServer(getClientList());
 			if(j == null){
-				close();
-				System.exit(0);
+				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
 			}
 			String msg = j.toString() + "\n";
-			mainMenu.o.write (msg.getBytes(StandardCharsets.UTF_8));
+			c.o.write (msg.getBytes(StandardCharsets.UTF_8));
 			
-			j = getResponse(i);
+			j = getResponse(c.i);
 			if(j == null){
-				close();
-				System.exit(0);
+				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
 			}
 
 			JsonArray jsonA = (j.get("payload")).getAsJsonObject().get("data").getAsJsonArray();
 			if(jsonA.size() > 0){
 				for(int temp = 0; temp < jsonA.size(); temp++){
 					JsonObject jotemp = jsonA.get(temp).getAsJsonObject();
-					String temp3 = jotemp.get("data").getAsJsonObject().get("Mac").toString().replaceAll("\"", "");
-					if(!temp3.equals(MAC)){
-						Clients client = new Clients(jotemp.get("id").toString(), jotemp);
-						model.addElement(client);
+					String temp3 = jotemp.get("id").getAsString().toString();
+					if(!temp3.equals(client.id)){
+						Clients clients = new Clients(jotemp.get("id").getAsString().toString(), 
+									jotemp.get("name").getAsString().toString(), 
+									jotemp.get("ciphers").getAsString().toString(), 
+									jotemp.get("data").getAsJsonObject());
+						model.addElement(clients);
 					}
 				}
 			}
-			System.out.println(j.toString());
 		}catch(Exception e){
-			System.err.println("Error in list request: " + e);
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 		}
 		
 		final JList<Clients> list = new JList<Clients>(model);
+		
+		final JButton settingsButton = new JButton("Settings");
 
-		JButton connectButton = new JButton("Connect");
+		final JButton connectButton = new JButton("Connect");
 		connectButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				try{
-					/*JsonObject j = new JsonObject();
-					j = connectToClient(list.getSelectedValue().id);
-					if(j == null){
+					connectButton.setEnabled(false);
+					settingsButton.setEnabled(false);
+					JsonObject j = new JsonObject();
+					if(list.getSelectedValue() == null){
 						return ;
 					}
-					String msg = j.toString() + "\n";
-					mainMenu.o.write (msg.getBytes(StandardCharsets.UTF_8));
+					j = messageServer(connectToClient(list.getSelectedValue().id));
+					if(j == null){
+						System.err.println("Error in: " + this.getClass().getName() + " line " + 
+								Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
+					}
 					
-					j = getResponse(mainMenu.i);
-					if(j == null){
-						return ;
-					}
-					System.out.println(j.toString());*/
-					frame.dispose();
-					chat chat = new chat(mainMenu.c, mainMenu.o, mainMenu.i, mainMenu.MAC, mainMenu.name, mainMenu.port, "abc");
-					chat.setVisible(true);
+					String msg = j.toString() + "\n";
+					mainMenu.c.o.write (msg.getBytes(StandardCharsets.UTF_8));
 				}catch(Exception e1){
-					System.err.println("Error trying to connect with client: " + e1);
+					System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
 				}
+				
 			}
 		});
 		
 		JLabel lblNewLabel = new JLabel("Users Online");
 		lblNewLabel.setForeground(new Color(255, 255, 255));
 		
-		JButton settingsButton = new JButton("Settings");
 		GroupLayout gl_contentPane = new GroupLayout(contentPane);
 		gl_contentPane.setHorizontalGroup(
 			gl_contentPane.createParallelGroup(Alignment.LEADING)
@@ -196,5 +211,8 @@ public class mainMenu extends JFrame {
 					.addContainerGap(20, Short.MAX_VALUE))
 		);
 		contentPane.setLayout(gl_contentPane);
+		
+		checkIncoming.main(this, c, client);
+		checkIncoming.start();
 	}
 }
