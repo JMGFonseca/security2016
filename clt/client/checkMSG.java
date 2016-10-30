@@ -6,10 +6,13 @@ import java.beans.PropertyChangeSupport;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 
@@ -28,18 +31,23 @@ public class checkMSG implements PropertyChangeListener {
         private PropertyChangeSupport pcs = new PropertyChangeSupport(this);
         
         private connection c;
-        private int port;
         private String command;
         private JButton jb;
+        private Clients src;
+        private Clients dst;
+        private JFrame frame;
         
         public volatile static boolean flag = true;
         public volatile static boolean sent = false;
         
         DateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
         
-        getMSG(int port, JButton jb){
-        	this.port = port;
+        getMSG(connection c, JButton jb, Clients src, Clients dst, JFrame frame){
+        	this.c = c;
         	this.jb = jb;
+        	this.src = src;
+        	this.dst = dst;
+        	this.frame = frame;
         }
 
         public void addPropertyChangeListener(PropertyChangeListener listener) {
@@ -61,12 +69,6 @@ public class checkMSG implements PropertyChangeListener {
 
         @Override
         public void run() {
-        	try {
-				c = new connection(new Socket("localhost", port));
-			} catch (Exception e1) {
-				System.err.println("Error in: " + this.getClass().getName() + " line " + 
-						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
-			}
         	JsonObject j = new JsonObject();
             while (flag) {
                 try {
@@ -75,23 +77,102 @@ public class checkMSG implements PropertyChangeListener {
                 		System.err.println("Error in: " + this.getClass().getName() + " line " + 
 								Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: null return");
                 	}
-                	else{
+                	JsonObject payload = j.getAsJsonObject( "payload" );
+                	JsonElement innerCmd = (payload == null) ? null : payload.get( "type" );
+                	System.out.println("Received: " + innerCmd.getAsString().toString());
                 	
-                		sendACK();
+                	if (innerCmd == null) {
+       			     
+                	}
+                	else if (innerCmd.getAsString().equals( "ack" )) {
+                		JsonElement id = payload.get( "dst" );
+                		
+    	   			    if (id == null) {
+    	   			    	 
+    	   			    }
+    	   			    else if(id.getAsString().toString().equals(src.id)){
+    	   			    	Date date = new Date();
+    	   	                setCommand(dateFormat.format(date) + " -/ " + payload);
+    	   			    }
+                	}
+                	else if (innerCmd.getAsString().equals( "client-com" )) {
+                		JsonElement id = payload.get( "dst" );
+    	   			    if (id == null) {
+    	   			    	 
+    	   			    }
+    	   			    else if(id.getAsString().toString().equals(src.id)){
+    	   			    	Date date = new Date();
+    	   			    	sendACK(payload.get("data").getAsJsonObject().get("text").getAsString().toString());
+    	   	                setCommand(dateFormat.format(date) + " -/ " + payload);
+    	   			    }
+                	}
+                	else if (innerCmd.getAsString().equals( "client-disconnect" )) {
+                		JsonElement id = payload.get( "dst" );
+                		
+    	   			    if (id == null) {
+    	   			    	 
+    	   			    }
+    	   			    else if(id.getAsString().toString().equals(src.id)){
+    	   			    	JOptionPane.showMessageDialog(frame,
+                    			    "Other client disconnected.",
+                    			    "Server Message",
+                    			    JOptionPane.WARNING_MESSAGE);
+                    		jb.doClick();
+    	   			    }
                 	}
                     Thread.sleep(1000);
                 } catch (Exception e) {
                 	System.err.println("Error in: " + this.getClass().getName() + " line " + 
 							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
                 }
-                Date date = new Date();
-                setCommand(dateFormat.format(date) + "");
             }
-            c.close();
         }
         
-        private void sendACK(){
-        	
+        public JsonObject messageServer(JsonObject jo){
+    		try {
+    			JsonObject j = new JsonObject();
+    			
+    			j.addProperty("type", "secure");
+    			j.addProperty("sa-data", "mac");
+    			j.add("payload", jo);
+    			
+    			return j;
+    		} catch (Exception e) {
+    			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+    					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+    		}
+    		return null;
+    	}
+        
+        private JsonObject accept(String text){
+        	try {
+    			JsonObject j = new JsonObject();
+    			
+    			j.addProperty("type", "ack");
+    			j.addProperty("src", src.id);
+    			j.addProperty("dst", dst.id);
+    			
+    			JsonObject temp = src.description.getAsJsonObject();
+    			temp.addProperty("text", text);
+    			j.add("data", temp);
+    			
+    			return j;
+    		} catch (Exception e) {
+    			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+    					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+    		}
+        	return null;
+        }
+        
+        private void sendACK(String text){
+        	JsonObject send = messageServer(accept(text));
+        	String msg = send.toString() + "\n";
+			try {
+				c.o.write (msg.getBytes(StandardCharsets.UTF_8));
+			} catch (Exception e1) {
+				System.err.println("Error in: " + this.getClass().getName() + " line " + 
+						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
+			}
         }
 
         public String getCommand() {
@@ -119,7 +200,18 @@ public class checkMSG implements PropertyChangeListener {
     }
 
     private void executeCommand() {
-        chat.append(runnable.getCommand() + "\n");
+    	String temp = runnable.getCommand().split(" -/ ")[0];
+    	String name = null;
+    	JsonObject payload = new JsonParser().parse(runnable.getCommand().split(" -/ ")[1]).getAsJsonObject();
+    	if(payload == null)
+    		return ;
+    	if(payload.get("type").getAsString().toString().equals("client-com"))
+    		name = payload.get("src").getAsString().toString();
+    	else if(payload.get("type").getAsString().toString().equals("ack")){
+    		name = payload.get("dst").getAsString().toString();
+    	}
+    	JsonObject data = payload.get( "data" ).getAsJsonObject();
+        chat.append(name + " [" + temp + "] : " + data.get("text").getAsString().toString() + "\n");
     }
 
     @Override
@@ -135,9 +227,9 @@ public class checkMSG implements PropertyChangeListener {
     }
     
 
-    public static void main(JTextArea jt, int port, Clients src, Clients dst, JButton jb) {
+    public static void main(JTextArea jt, connection c, Clients src, Clients dst, JButton jb, JFrame frame) {
     	chat = jt;
-        final getMSG runnable = new getMSG(port, jb);
+        final getMSG runnable = new getMSG(c, jb, src, dst, frame);
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {

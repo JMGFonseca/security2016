@@ -13,7 +13,6 @@ import java.util.Date;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JFrame;
-import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -174,7 +173,7 @@ public class checkIncoming implements PropertyChangeListener {
 	                	String name = data.get("name").getAsString().toString();
 	                	checkIncoming.stop();
 						frame.dispose();
-						chat chat = new chat(c, src, new Clients(payload.get( "dst" ).getAsString(), 
+						chat chat = new chat(c, src, new Clients(payload.get( "src" ).getAsString(), 
 			        			name,
 			        			src.ciphers,
 			        			data));
@@ -251,8 +250,6 @@ public class checkIncoming implements PropertyChangeListener {
 			j.addProperty("type", "client-disconnect");
 			j.addProperty("src", payload.get("dst").getAsString());
 			j.addProperty("dst", payload.get("src").getAsString());
-			j.addProperty("phase", payload.get("phase").getAsInt() + 1);
-			j.addProperty("ciphers", "DES");
 			
 			j.add("data", payload.get("data").getAsJsonObject());
 			
@@ -327,7 +324,7 @@ public class checkIncoming implements PropertyChangeListener {
 				System.err.println("Error in: " + this.getClass().getName() + " line " + 
 						Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
 			}
-        	chat chat = new chat(c, src, new Clients(payload.get( "dst" ).getAsString(), 
+        	chat chat = new chat(c, src, new Clients(payload.get( "src" ).getAsString(), 
         			name,
         			payload.get( "ciphers" ).getAsString(),
         			data));

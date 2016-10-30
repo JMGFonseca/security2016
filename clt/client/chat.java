@@ -16,10 +16,12 @@ import javax.swing.GroupLayout.Alignment;
 import javax.swing.JTextField;
 import javax.swing.JButton;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.awt.event.ActionEvent;
 import javax.swing.JTextArea;
 
@@ -33,6 +35,59 @@ public class chat extends JFrame{
 	private static Clients dst;
 	private JTextField textField;
 	
+	public JsonObject messageServer(JsonObject jo){
+		try {
+			JsonObject j = new JsonObject();
+			
+			j.addProperty("type", "secure");
+			j.addProperty("sa-data", "mac");
+			j.add("payload", jo);
+			
+			return j;
+		} catch (Exception e) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+		}
+		return null;
+	}
+	
+	private JsonObject send(String text){
+		try {
+			JsonObject j = new JsonObject();
+			
+			j.addProperty("type", "client-com");
+			j.addProperty("src", src.id);
+			j.addProperty("dst", dst.id);
+			
+			JsonObject temp = src.description.getAsJsonObject();
+			temp.addProperty("text", text);
+			j.add("data", temp);
+			return j;
+		} catch (Exception e) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+		}
+    	return null;
+	}
+	
+	private JsonObject decline(){
+    	try {
+			JsonObject j = new JsonObject();
+			
+			j.addProperty("type", "client-disconnect");
+			j.addProperty("src", src.id);
+			j.addProperty("dst", dst.id);
+			
+			j.add("data", src.description.getAsJsonObject());
+			
+			return j;
+		} catch (Exception e) {
+			System.err.println("Error in: " + this.getClass().getName() + " line " + 
+					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e);
+		}
+    	return null;
+    }
+	
 	/**
 	 * Create the frame.
 	 */
@@ -41,7 +96,7 @@ public class chat extends JFrame{
 		chat.src = src;
 		chat.dst = dst;
 		
-		setTitle("SCIM");
+		setTitle("SCIM : " + src.id);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 450, 300);
 		contentPane = new JPanel();
@@ -62,18 +117,40 @@ public class chat extends JFrame{
 				.addComponent(panel, GroupLayout.DEFAULT_SIZE, 268, Short.MAX_VALUE)
 		);
 		
-		JButton sendButton = new JButton("Send");
+		textField = new JTextField();
+		textField.setColumns(10);
+		
 		final JTextArea textArea = new JTextArea();
 		textArea.setEditable(false);
 		
 		JScrollPane sp = new JScrollPane(textArea);
 		
-		textField = new JTextField();
-		textField.setColumns(10);
+		JButton sendButton = new JButton("Send");
+		sendButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				JsonObject send = messageServer(send(textField.getText()));
+	        	String msg = send.toString() + "\n";
+				try {
+					chat.c.o.write (msg.getBytes(StandardCharsets.UTF_8));
+				} catch (IOException e1) {
+					System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
+				}
+				textField.setText("");
+			}
+		});
 		
 		JButton disconnectButton = new JButton("Disconnect");
 		disconnectButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				JsonObject send = messageServer(decline());
+	        	String msg = send.toString() + "\n";
+				try {
+					chat.c.o.write (msg.getBytes(StandardCharsets.UTF_8));
+				} catch (IOException e1) {
+					System.err.println("Error in: " + this.getClass().getName() + " line " + 
+							Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
+				}
 				checkMSG.stop();
 				frame.dispose();
 				mainMenu mn = new mainMenu(chat.c, chat.src);
@@ -115,7 +192,7 @@ public class chat extends JFrame{
 		
 		try {
 			checkMSG.start();
-			checkMSG.main(textArea, chat.c.port, src, dst, disconnectButton);
+			checkMSG.main(textArea, chat.c, src, dst, disconnectButton, this);
 		} catch (Exception e1) {
 			System.err.println("Error in: " + this.getClass().getName() + " line " + 
 					Thread.currentThread().getStackTrace()[1].getLineNumber() + "\nError: " + e1);
